@@ -14,9 +14,11 @@ var AccelerationStream = require("./AccelerationStream").AccelerationStream;
  * an L8 Smartlight
  *
  * If no baudrate is specified a default speed of `115200` will be used.
+ * If no timeout is specified, a default timeout of 2000ms will be used.
  *
  * @param {String} port
  * @param {Number} [baudrate]
+ * @param {Number} [timeout]
  *
  * @fires L8#frameSent
  * @fires L8#frameReceived
@@ -56,7 +58,7 @@ var AccelerationStream = require("./AccelerationStream").AccelerationStream;
  *  });
  * ```
  */
-var L8 = function(port, baudrate) {
+var L8 = function(port, baudrate, timeout) {
     EventEmitter.call(this);
 
     // Default value for speed argument
@@ -103,6 +105,14 @@ var L8 = function(port, baudrate) {
         buffer: new Buffer(4096),
         length: 0
     };
+
+    /**
+    * Timeout for frameReceived event
+    *
+    * @type (Number
+    * @private
+    */
+    this.receivedTimeout_ = timeout || 2000;
 };
 util.inherits(L8, EventEmitter);
 
@@ -301,6 +311,7 @@ L8.prototype.sendFrame = function(buffer, expectedResponse, handleError, fn) {
     if (!this.isConnected) {
         throw new Error("L8 is not connected. Can't send data to it.");
     }
+    var _timeout;
 
     this.serialport_.write(buffer, function(error, writeCount) {
         if (error) {
@@ -334,6 +345,7 @@ L8.prototype.sendFrame = function(buffer, expectedResponse, handleError, fn) {
 
             var onReceive = function(frame) {
                 var error = false;
+                clearTimeout(_timeout);
                 /* Always check for possible error states */
                 if (
                     (handleError === true &&
@@ -369,6 +381,10 @@ L8.prototype.sendFrame = function(buffer, expectedResponse, handleError, fn) {
                 fn(error, frame);
             }.bind(this); /* onReceive */
             this.on("frameReceived", onReceive);
+            _timeout = setTimeout(function(){
+                fn(new Error('operation timeout'));
+            }, this.receivedTimeout_);
+
         }.bind(this)); /* drain */
     }.bind(this)); /* write */
 };
